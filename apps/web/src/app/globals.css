@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  @apply bg-white text-neutral-900 dark:bg-ink-950 dark:text-neutral-100;
+}
+
+::selection {
+  @apply bg-neutral-900 text-white dark:bg-white dark:text-neutral-900;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

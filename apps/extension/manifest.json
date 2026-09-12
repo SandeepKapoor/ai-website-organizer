@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "AI Website Organizer",
+  "version": "1.0.0",
+  "description": "Syncs your Chrome bookmarks into your AI Website Organizer library.",
+  "permissions": ["bookmarks", "storage"],
+  "host_permissions": ["http://localhost:3000/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AI Website Organizer"
+  }
+}

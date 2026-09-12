@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profiles ChromeProfile[]
+}
+
+model ChromeProfile {
+  id               String   @id @default(cuid())
+  userId           String
+  profileName      String
+  connectionStatus String   @default("connected") // connected | syncing | synced | connection_error | disconnected
+  lastSyncedAt     DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folders   BookmarkFolder[]
+  bookmarks Bookmark[]
+  syncLogs  SyncLog[]
+
+  @@index([userId])
+}
+
+model BookmarkFolder {
+  id              String   @id @default(cuid())
+  chromeProfileId String
+  chromeFolderId  String
+  parentFolderId  String?
+  name            String
+  path            String
+  position        Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  profile   ChromeProfile    @relation(fields: [chromeProfileId], references: [id], onDelete: Cascade)
+  parent    BookmarkFolder?  @relation("FolderChildren", fields: [parentFolderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children  BookmarkFolder[] @relation("FolderChildren")
+  bookmarks Bookmark[]
+
+  @@unique([chromeProfileId, chromeFolderId])
+  @@index([parentFolderId])
+}
+
+// Normalized website record — shared metadata cache across bookmarks that
+// point at the same URL (see PRD §36, §37, §47). Never stores per-user data.
+model Website {
+  id             String   @id @default(cuid())
+  normalizedUrl  String   @unique
+  domain         String
+  metaTitle      String?
+  metaDescription String?
+  descriptionSource String? // meta_description | og_description | other | none
+  ogTitle        String?
+  ogDescription  String?
+  ogImage        String?
+  twitterImage   String?
+  siteName       String?
+  favicon        String?
+  canonicalUrl   String?
+  thumbnailUrl   String?
+  thumbnailSource String? // og:image | twitter:image | screenshot | favicon | placeholder
+  metadataStatus String   @default("pending") // pending | processing | complete | failed
+  thumbnailStatus String  @default("pending") // pending | processing | complete | failed
+  lastFetchedAt  DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  bookmarks Bookmark[]
+}
+
+model Bookmark {
+  id              String   @id @default(cuid())
+  chromeProfileId String
+  chromeBookmarkId String
+  folderId        String?
+  websiteId       String?
+
+  chromeTitle String   // original, never overwritten by enrichment
+  url         String   // original url as saved in Chrome
+  domain      String
+  dateAdded   DateTime
+  position    Int      @default(0)
+  isDeleted   Boolean  @default(false)
+  // Distinguishes "suppressed because it's an exact-URL duplicate of
+  // another active bookmark" from a normal user-initiated removal — a
+  // duplicate stays suppressed across future re-syncs even though the
+  // underlying Chrome bookmark still exists (see lib/dedupe.ts). A plain
+  // isDeleted with isDuplicate=false is a real removal and behaves as before.
+  isDuplicate Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile ChromeProfile   @relation(fields: [chromeProfileId], references: [id], onDelete: Cascade)
+  folder  BookmarkFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  website Website?        @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+
+  @@unique([chromeProfileId, chromeBookmarkId])
+  @@index([folderId])
+  @@index([websiteId])
+}
+
+// One row per sync call (full re-import or incremental) that actually
+// changed something worth surfacing — a routine no-op resync doesn't create
+// one of these. Lets Settings > Profiles show "what changed last sync" and
+// undo it.
+model SyncLog {
+  id                       String    @id @default(cuid())
+  chromeProfileId          String
+  createdAt                DateTime  @default(now())
+  source                   String // full_import | incremental
+  addedCount               Int       @default(0)
+  removedCount             Int       @default(0)
+  duplicateSuppressedCount Int       @default(0)
+  unsuppressedCount        Int       @default(0)
+  restoredAt               DateTime?
+
+  profile ChromeProfile @relation(fields: [chromeProfileId], references: [id], onDelete: Cascade)
+  changes SyncChange[]
+
+  @@index([chromeProfileId])
+}
+
+// A single bookmark's state transition within a SyncLog. Deliberately not a
+// hard FK to Bookmark — restoring a "created" change deletes that bookmark
+// row, which would otherwise dangle a relation.
+model SyncChange {
+  id                  String  @id @default(cuid())
+  syncLogId           String
+  chromeBookmarkId    String
+  action              String // created | removed | suppressed_duplicate | unsuppressed
+  previousIsDeleted   Boolean?
+  previousIsDuplicate Boolean?
+  newIsDeleted        Boolean
+  newIsDuplicate      Boolean
+  title               String
+  url                 String
+
+  syncLog SyncLog @relation(fields: [syncLogId], references: [id], onDelete: Cascade)
+
+  @@index([syncLogId])
+}

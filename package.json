@@ -1,0 +1,13 @@
+{
+  "name": "ai-website-organizer",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "start": "pnpm --filter web start",
+    "db:push": "pnpm --filter web db:push",
+    "db:seed": "pnpm --filter web db:seed"
+  },
+  "packageManager": "pnpm@9.0.0"
+}
